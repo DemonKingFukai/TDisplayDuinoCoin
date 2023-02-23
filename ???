@@ -1,0 +1,145 @@
+#include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
+#include <TFT_eSPI.h>
+
+#define DUCO_USERNAME "your_username"
+#define DUCO_PASSWORD "your_password"
+#define WIFI_SSID "your_wifi_ssid"
+#define WIFI_PASS "your_wifi_pass"
+
+// Define pins for display
+#define TFT_MISO 19
+#define TFT_MOSI 23
+#define TFT_SCLK 18
+#define TFT_CS   5  
+#define TFT_DC    16 
+#define TFT_RST   -1 
+
+// Create display object
+TFT_eSPI tft = TFT_eSPI();
+
+// Create WiFi client object
+WiFiClientSecure client;
+
+// Create JSON document object
+DynamicJsonDocument doc(1024);
+
+void setup() {
+  // Initialize serial monitor
+  Serial.begin(115200);
+
+  // Initialize display
+  tft.init();
+  tft.setRotation(1);
+  
+  // Connect to WiFi network
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  
+  // Wait until connected or timeout
+  uint8_t timeout = 12;
+  while (WiFi.status() != WL_CONNECTED && timeout--) {
+    delay(500);
+    Serial.print(".");
+    tft.print("."); // Print dots on screen too
+  }
+  
+  // Check WiFi connection status
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("Connected!");
+    tft.println("Connected!"); // Print message on screen too
+    
+    // Connect to Duino-Coin server using SSL/TLS encryption
+    client.setInsecure(); 
+    if (!client.connect("server.duinocoin.com", 2812)) {
+      Serial.println("Connection failed!");
+      tft.println("Connection failed!"); // Print message on screen too
+      
+      while (true) {} // Stop here if connection failed 
+    }
+    
+    // Send login request with username and password 
+    client.print(String(DUCO_USERNAME) + "," + String(DUCO_PASSWORD) + ",ESP32\n");
+    
+    // Wait for server response 
+    while (!client.available()) {}
+    
+    // Read server response 
+    String response = client.readStringUntil('\n');
+    
+    // Parse JSON response 
+    deserializeJson(doc, response);
+    
+     if (doc["success"] == true) { 
+       Serial.println("Logged in!");
+       tft.println("Logged in!"); // Print message on screen too
+
+       delay(1000);       
+     } else { 
+       Serial.println("Login failed!");
+       tft.println("Login failed!"); // Print message on screen too
+
+       while (true) {} // Stop here if login failed      
+     }   
+     
+     doc.clear();     
+     
+     delay(1000);   
+     
+     tft.fillScreen(TFT_BLACK);   // Clear screen before mining loop   
+     
+   } else {
+     Serial.println("Connection failed!");
+     tft.println("Connection failed!"); // Print message on screen too
+     
+     while (true) {} // Stop here if connection failed   
+   }
+}
+
+void loop() {
+  
+   client.print(String(DUCO_USERNAME) + ",ESP32\n"); 
+  
+   while (!client.available()) {}
+   
+   String response = client.readStringUntil('\n');
+   
+   deserializeJson(doc, response);
+   
+   float balance = doc["result"]["balance"];
+   float hashrate = doc["result"]["hashrate"];
+   
+   doc.clear();
+   
+   Serial.print("Balance: ");
+   Serial.print(balance);
+   Serial.print(", Hashrate: ");
+   Serial.print(hashrate);
+   Serial.println();
+   
+   tft.fillScreen(TFT_BLACK);        // Clear previous text
+   
+   tft.setTextColor(TFT_GREEN);      // Set text color to green
+   
+   tft.setTextSize(2);               // Set text size to large
+   
+   tft.setCursor(0,0);               // Set cursor position to top left
+   
+   tft.print(F("Duino-Coin Miner")); 
+    
+   tft.setTextSize(1);               // Set text size to normal
+   
+   tft.setCursor(0,30);             
+    
+   char buffer[50];
+    
+   sprintf(buffer,"Balance: %.4f DUCO",balance);
+    
+   tft.print(buffer);
+    
+   sprintf(buffer,"Hashrate: %.2f H/s",hashrate);
+    
+   tft.setCursor(0,50);
+    
+   tft.print(buffer);
+
+}
